@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
 	// 	RelocInfo(PE_PATH);
 
 	//练习九 打印导入表
-	ImportInfo("kernel32.dll");
+	// ImportInfo("kernel32.dll");
 
 	//练习十 移动导出表
 	//	MoveExportTable(PE_PATH,"MyExport",PEMOVEEXPOPRT_PATH);

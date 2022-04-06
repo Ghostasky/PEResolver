@@ -19,6 +19,7 @@ DWORD RVATORAWEx(IN const void *pFileBuf, IN DWORD dwOffset, IN BOOL bRVATORAW);
 BOOL AddShellCode(IN const char *pPEPath, IN BYTE *pShellCode, IN int SectionIndex, IN const char *outName);
 BOOL PrintExportTable(IN const char *pPEPath);
 BOOL PrintImportTable(IN const char *pPEPath);
+BOOL PrintRelocateTable(IN const char *pPEPath);
 //////////////////////////////////////////////////////////
 int main()
 {
@@ -45,10 +46,12 @@ int main()
 
     // 7. 打印导出表
     // PrintExportTable("kernel32.dll");
+
     // 8.打印重定位
 
     // 9. 打印导入表
-    PrintImportTable("kernel32.dll");
+    // PrintImportTable("kernel32.dll");
+
     // 10.移动导出表
     return 0;
 }
@@ -427,10 +430,67 @@ BOOL PrintImportTable(IN const char *pPEPath)
     {
         printf("---------------------导出表头信息:%d------------------\n", NumOfImport++);
         printf("INT address(RVA):0x%X\n", pIID->OriginalFirstThunk);
-        printf("Name:%s", (DWORD)pFileBuf + RVATORAWEx(pFileBuf, pIID->Name, true));
-        printf("FirstThunk(RVA:0x%X\n)", pIID->FirstThunk);
+        printf("Name:%s\n", (DWORD)pFileBuf + RVATORAWEx(pFileBuf, pIID->Name, true));
+        printf("FirstThunk(RVA:0x%X)\n", pIID->FirstThunk);
+
         printf("---------------------INT头信息------------------\n");
-        DWORD *aa = (DWORD *)((DWORD)pFileBuf + RVATORAWEx(pFileBuf, pIID->OriginalFirstThunk, true));
+        DWORD *INT = (DWORD *)((DWORD)pFileBuf + RVATORAWEx(pFileBuf, pIID->OriginalFirstThunk, true));
+        while (*INT)
+        {
+            //判断最高位，如果是1，则是序号导入，否则是名字导入
+            // IMAGE_THUNK_DATA32 是一个4字节数据
+            // 如果最高位是1，那么除去最高位就是导出序号
+            // 如果最高位是0，那么这个值是RVA 指向 IMAGE_IMPORT_BY_NAME
+            if (((*INT) & 0x80000000) == 0x80000000)
+                printf("以序号导入:0x%X\n", (*INT) & (0x7fffffff));
+            else
+            {
+                IMAGE_IMPORT_BY_NAME *pIIBN = (IMAGE_IMPORT_BY_NAME *)((DWORD)pFileBuf + RVATORAWEx(pFileBuf, *INT, true));
+                printf("Hint:%X  name:%s\n", pIIBN->Hint, pIIBN->Name);
+            }
+            INT++;
+        }
+
         printf("---------------------IAT头信息------------------\n");
+        DWORD *IAT = (DWORD *)((DWORD)pFileBuf + RVATORAWEx(pFileBuf, pIID->FirstThunk, true));
+        while (*IAT)
+        {
+            // IMAGE_THUNK_DATA32 是一个4字节数据
+            // 如果最高位是1，那么除去最高位就是导出序号
+            // 如果最高位是0，那么这个值是RVA 指向 IMAGE_IMPORT_BY_NAME
+            if (((*INT) & 0x80000000) == 0x80000000)
+
+                printf("以序号导入:0x%X\n", (*IAT) & (0x7fffffff));
+
+            else
+            {
+                IMAGE_IMPORT_BY_NAME *pIIBN = (IMAGE_IMPORT_BY_NAME *)((DWORD)pFileBuf + RVATORAWEx(pFileBuf, *IAT, true));
+                printf("Hint:%X  name:%s\n", pIIBN->Hint, pIIBN->Name);
+            }
+            IAT++;
+        }
+        pIID++;
+    }
+    UnReadPEToMemory(pFileBuf);
+    return TRUE;
+}
+BOOL PrintRelocateTable(IN const char *pPEPath)
+{
+    void *pFileBuf = ReadPEToMemory(pPEPath, NULL);
+    if (!pFileBuf)
+        return false;
+
+    IMAGE_DOS_HEADER *pIDH = (IMAGE_DOS_HEADER *)pFileBuf;
+    IMAGE_NT_HEADERS *pINH = (IMAGE_NT_HEADERS *)((DWORD)pIDH + pIDH->e_lfanew);
+    IMAGE_OPTIONAL_HEADER IOH = pINH->OptionalHeader;
+    // 第六个是重定位
+    DWORD Size = IOH.DataDirectory[6].Size;
+    DWORD RVAVirtualAddresss = IOH.DataDirectory[6].VirtualAddress;
+
+    if (Size == 0 || RVAVirtualAddresss == 0)
+    {
+        printf("没有重定位\n");
+        UnReadPEToMemory(pFileBuf);
+        return false;
     }
 }

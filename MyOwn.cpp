@@ -48,6 +48,7 @@ int main()
     // PrintExportTable("kernel32.dll");
 
     // 8.打印重定位
+    // PrintRelocateTable("kernel32.dll");
 
     // 9. 打印导入表
     // PrintImportTable("kernel32.dll");
@@ -484,8 +485,8 @@ BOOL PrintRelocateTable(IN const char *pPEPath)
     IMAGE_NT_HEADERS *pINH = (IMAGE_NT_HEADERS *)((DWORD)pIDH + pIDH->e_lfanew);
     IMAGE_OPTIONAL_HEADER IOH = pINH->OptionalHeader;
     // 第六个是重定位
-    DWORD Size = IOH.DataDirectory[6].Size;
-    DWORD RVAVirtualAddresss = IOH.DataDirectory[6].VirtualAddress;
+    DWORD Size = IOH.DataDirectory[5].Size;
+    DWORD RVAVirtualAddresss = IOH.DataDirectory[5].VirtualAddress;
 
     if (Size == 0 || RVAVirtualAddresss == 0)
     {
@@ -493,4 +494,34 @@ BOOL PrintRelocateTable(IN const char *pPEPath)
         UnReadPEToMemory(pFileBuf);
         return false;
     }
+    DWORD RWAAddress = RVATORAWEx(pFileBuf, RVAVirtualAddresss, true);
+    IMAGE_BASE_RELOCATION *pIBR = (IMAGE_BASE_RELOCATION *)((DWORD)pFileBuf + RWAAddress);
+    DWORD RelocNum = 1;
+    WORD *pRelocItem = NULL;
+    while (pIBR->SizeOfBlock && pIBR->VirtualAddress)
+    {
+        printf("\n------------第 %u 个重定位块-------------\n", RelocNum);
+        pRelocItem = (WORD *)((DWORD)pIBR + sizeof(IMAGE_BASE_RELOCATION));
+        DWORD ItemNm = (pIBR->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / 2;
+        DWORD NewLine = 0;
+        for (DWORD i = 0; i < ItemNm; i++)
+        {
+            // 最高4位为3的时候才重定位
+            if ((*pRelocItem & 0x3000) == 0x3000)
+            {
+                if (NewLine == 10)
+                {
+                    printf("\n");
+                    NewLine = 0;
+                }
+                printf("%X ", pIBR->VirtualAddress + (*pRelocItem & 0x0fff));
+                NewLine++;
+            }
+            pRelocItem++;
+        }
+        RelocNum++;
+        pIBR = (IMAGE_BASE_RELOCATION *)((DWORD)pIBR + pIBR->SizeOfBlock);
+    }
+    UnReadPEToMemory(pFileBuf);
+    return true;
 }
